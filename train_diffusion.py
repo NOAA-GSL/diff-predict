@@ -5,7 +5,7 @@
 # @Email: jebb.q.stewart@noaa.gov 
 #
 # @Last modified by:   Jebb Q. Stewart
-# @Last Modified time: 2024-02-06 10:17:00
+# @Last Modified time: 2024-02-06 14:26:57
 
 from dataclasses import dataclass
 from XarrayDataset import XarrayDataset
@@ -33,8 +33,8 @@ import torch
 @dataclass
 class TrainingConfig:
     image_size = 128  # the generated image resolution
-    train_batch_size = 6
-    eval_batch_size = 6  # how many images to sample during evaluation
+    train_batch_size = 3
+    eval_batch_size = 3  # how many images to sample during evaluation
     num_epochs = 100
     gradient_accumulation_steps = 1
     learning_rate = 1e-4
@@ -85,14 +85,14 @@ model = UNet2DModel(
 dataset = load_dataset("hrrr_disk", name="hrrr_v4_more_analysis", split="train", trust_remote_code=True)
 # dataset.cleanup_cache_files()
 
-t2m_mean = 278.6412
-t2m_std = 21.236853
+# t2m_mean = 278.6412
+# t2m_std = 21.236853
 
 preprocess = transforms.Compose(
     [
         transforms.Resize((config.image_size, config.image_size),antialias=None),
         # transforms.RandomHorizontalFlip(),
-        transforms.Normalize([t2m_mean], [t2m_std]),
+        # transforms.Normalize([t2m_mean], [t2m_std]),
     ]
 )
 

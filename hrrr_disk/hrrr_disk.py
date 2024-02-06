@@ -5,7 +5,7 @@
 # @Email: jebb.q.stewart@noaa.gov 
 #
 # @Last modified by:   Jebb Q. Stewart
-# @Last Modified time: 2024-02-06 10:16:36
+# @Last Modified time: 2024-02-06 14:17:50
 
 import dateutil
 from datetime import datetime, timedelta
@@ -64,8 +64,22 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
         self.NUM_FUTURE_FRAMES = 2 # T+3, T+6
         self.variables = ['t2m']
 
+        self.means = {}
+        self.means['u10']   = -0.07404756
+        self.means['v10']   = 0.19169427
+        self.means['t2m']   = 278.6412
+        self.means['prmsl'] = 100966.72
+        self.means['pwat']   = 18.408087
+
+        self.stds = {}
+        self.stds['u10']   = 5.567108
+        self.stds['v10']   = 4.7881403
+        self.stds['t2m']   = 21.236853
+        self.stds['prmsl'] = 1330.6351
+        self.stds['pwat']   = 16.482214
+
         if self.config.name == "hrrr_v4_more_analysis":
-             self.variables = ['t2m', 'd2m', 'u10', 'v10', 'prmsl']
+             self.variables = ['t2m', 'u10', 'v10', 'prmsl', 'pwat']
              self.NUM_FEATURES = len(self.variables)
 
         print (f"using {self.config.name}")
@@ -83,7 +97,7 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
 
         features = datasets.Features(features)
 
-        self.train_start =  dateutil.parser.parse("2023-01-20T00:00:00")
+        self.train_start =  dateutil.parser.parse("2023-01-08T18:00:00")
         self.train_end = dateutil.parser.parse("2023-01-20T17:01:00")
 
         self.test_start =  dateutil.parser.parse("2023-01-12T00:00:00")
@@ -195,7 +209,7 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
         data = []
 
         for v in self.variables:
-            data.append(ds[v].values)
+            data.append((ds[v].values - self.means[v])/self.stds[v])
 
         data = np.array(data)
 

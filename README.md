@@ -4,6 +4,12 @@ This is an **experimental** project that implements AI Diffusion Techniques for 
 
 This assumes you have preprocessed zarr data somewhere in advance. See hrrr_disk/hrrr_disk.py for how to load data
 
+When loading a dataset, it will create a cache under your user home directory i.e. ~USER/.cache.  To change the caching location use:
+```
+export HF_DATASETS_CACHE="/path/to/another/directory"
+```
+
+
 ## Training 
 ```
 python3 -u train_diffusion.py
@@ -14,6 +20,13 @@ This will create a hrrr-2tm directory with logs, sample images as various epochs
 ## Inference
 
 Coming Soon!
+
+## To Do
+
+- [ ] Add easy inference script
+- [ ] Investigate streaming dataset (IterableDataset) for better storage and memory management
+- [x] Add capability for multiple variables
+- [ ] Expand to vertical levels 
 
 ## Disclaimer
 
