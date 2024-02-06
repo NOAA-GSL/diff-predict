@@ -30,6 +30,7 @@ class PredictionPipeline(DiffusionPipeline):
     def __call__(
         self,
         past_frames,
+        predict_frames: int = 1,
         batch_size: int = 1,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         num_inference_steps: int = 1000,
@@ -77,12 +78,12 @@ class PredictionPipeline(DiffusionPipeline):
         """
         # Sample gaussian noise to begin loop
         # if isinstance(self.unet.config.sample_size, int):
-        #     image_shape = (
-        #         batch_size,
-        #         self.unet.config.in_channels,
-        #         self.unet.config.sample_size,
-        #         self.unet.config.sample_size,
-        #     )
+        predict_shape = (
+            1,
+            predict_frames,
+            self.unet.config.sample_size,
+            self.unet.config.sample_size,
+        )
         # else:
         #     image_shape = (batch_size, self.unet.config.in_channels, *self.unet.config.sample_size)
 
@@ -96,7 +97,7 @@ class PredictionPipeline(DiffusionPipeline):
         # set step values
         self.scheduler.set_timesteps(num_inference_steps)
 
-        new_frames = torch.randn_like(past_frames, dtype=past_frames.dtype, device=self.device)
+        new_frames = torch.randn(predict_shape, generator=generator, dtype=past_frames.dtype, device=self.device)
 
         for t in self.progress_bar(self.scheduler.timesteps):
             # 1. predict noise model_output

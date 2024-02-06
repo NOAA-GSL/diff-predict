@@ -23,7 +23,7 @@ import torch
 
 @dataclass
 class TrainingConfig:
-    image_size = 64  # the generated image resolution
+    image_size = 128  # the generated image resolution
     train_batch_size = 6
     eval_batch_size = 6  # how many images to sample during evaluation
     num_epochs = 100
@@ -40,14 +40,16 @@ class TrainingConfig:
     hub_private_repo = False
     overwrite_output_dir = True  # overwrite the old model when re-running the notebook
     seed = 42
-    predict_images=1
+    past_frames = 3
+    predict_frames = 2
+
 
 config = TrainingConfig()
 
 model = UNet2DModel(
     sample_size=config.image_size,  # the target image resolution
-    in_channels=2,  # the number of input channels, 3 for RGB images
-    out_channels=1,  # the number of output channels
+    in_channels=config.past_frames + config.predict_frames,  # the number of input channels, 3 for RGB images
+    out_channels=config.predict_frames,  # the number of output channels
     layers_per_block=2,  # how many ResNet layers to use per UNet block
     # block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
     # block_out_channels=(32,32,64,64,128,128),
@@ -70,7 +72,7 @@ model = UNet2DModel(
     ),
 )
 
-dataset = load_dataset("hrrr_online", split="train", trust_remote_code=True)
+dataset = load_dataset("hrrr_disk", split="train", trust_remote_code=True)
 dataset.cleanup_cache_files()
 
 t2m_mean = 278.6412
@@ -89,22 +91,23 @@ def transform(examples):
     #     # print(data)
     #     # print (data)
     #     print (np.array(data).shape)
-    dataset = [preprocess(torch.from_numpy(np.array(data,dtype=np.float32))) for data in examples["data"]]
+    dataset = [preprocess(torch.from_numpy(np.array(data,dtype=np.float32))) for data in examples["past"]]
     predicted =  [preprocess(torch.from_numpy(np.array(data,dtype=np.float32))) for data in examples["predict"]]
-    return {"data": dataset, "predict": predicted }
+    return {"past": dataset, "predict": predicted }
 
 dataset.set_transform(transform)
 train_dataloader = torch.utils.data.DataLoader(dataset, num_workers=8, batch_size=config.train_batch_size)#, shuffle=True)
 
-past_image = dataset[0]["data"].unsqueeze(0)
+past_image = dataset[0]["past"].unsqueeze(0)
 pred_image = dataset[0]["predict"].unsqueeze(0)
 sample_set = torch.concat([past_image, pred_image], axis=1)
+
 
 print("Input shape:", sample_set.shape)
 print("Output shape:", model(sample_set, timestep=0).sample.shape)
 
 
-pred_img = Image.fromarray(((pred_image[0,0,...] + 0.5) *127.5).type(torch.uint8).numpy())
+pred_img = Image.fromarray(((pred_image[0,-1,...] + 0.5) *127.5).type(torch.uint8).numpy())
 past_img = Image.fromarray(((past_image[0,0,...] + 0.5) *127.5).type(torch.uint8).numpy())
 
 noise_scheduler = DDPMScheduler(num_train_timesteps=1000)
@@ -125,19 +128,27 @@ def evaluate(config, epoch, pipeline):
     
         data = pipeline(past_image,
                  batch_size=2,
+                 predict_frames=config.predict_frames,
                  generator=torch.Generator().manual_seed(config.seed),
                  output_type="np.array",
                  return_dict=False)[0]
 
         images=[]
-        img = Image.fromarray(((data[0,0,...] + 0.5) * 127.5).type(torch.uint8).numpy())
+        img_cnt = 1
+        images.append(past_img)
+        
+        for i in range(0,config.predict_frames):
+            img = Image.fromarray(((data[0,i,...] + 0.5) * 127.5).type(torch.uint8).numpy())
+            images.append(img)
+            img_cnt += 1
 
         images.append(past_img)
-        images.append(img)
-        images.append(past_img)
-        images.append(pred_img)
+        for i in range(0,config.predict_frames):
+            img = Image.fromarray(((pred_image[0,i,...] + 0.5) * 127.5).type(torch.uint8).numpy())
+            images.append(img)
+
         # Make a grid out of the images, rows cols must match image count
-        image_grid = make_image_grid(images, rows=2, cols=2)
+        image_grid = make_image_grid(images, rows=2, cols=img_cnt)
         image_grid.save(f"{test_dir}/{epoch:04d}.png")
 
     except Exception as e:
@@ -176,7 +187,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         progress_bar.set_description(f"Epoch {epoch}")
 
         for step, batch in enumerate(train_dataloader):
-            past_images = batch["data"]
+            past_images = batch["past"]
             pred_images = batch["predict"]
 
             # Sample noise to add to the images

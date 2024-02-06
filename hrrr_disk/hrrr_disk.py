@@ -45,15 +45,18 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
 
     DEFAULT_CONFIG_NAME = "hrrr_v4_analysis"  # It's not mandatory to have a default configuration. Just use one if it make sense.
 
-    NUM_FEATURES = 1 
-
 
     def _info(self):
-        features = {}
+
+        self.NUM_FEATURES = 1 
+        self.NUM_PREVIOUS_FRAMES = 3 # T-6, T-3, T
+        self.NUM_FUTURE_FRAMES = 2 # T+3, T+6
+
+        # features = {}
 
         features = {
-            "past": datasets.Array3D((NUM_FEATURES,512,512), dtype="float32"),
-            "predict": datasets.Array3D((NUM_FEATURES,512,512), dtype="float32"),
+            "past": datasets.Array3D((self.NUM_PREVIOUS_FRAMES*self.NUM_FEATURES,512,512), dtype="float32"),
+            "predict": datasets.Array3D((self.NUM_FUTURE_FRAMES*self.NUM_FEATURES,512,512), dtype="float32"),
 
             "timestamp": datasets.Sequence(datasets.Value("timestamp[ns]")),
             # "latitude": datasets.Sequence(datasets.Value("float32")),
@@ -120,19 +123,19 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
         print (train_data.shape)
 
 
-        timestamp = self.val_start
-        val_data = []
-        while timestamp < self.val_end:
-            val_data.append([timestamp])
-            timestamp = timestamp + timedelta(hours=1)
-        val_data = np.array(val_data)
+        # timestamp = self.val_start
+        # val_data = []
+        # while timestamp < self.val_end:
+        #     val_data.append([timestamp])
+        #     timestamp = timestamp + timedelta(hours=1)
+        # val_data = np.array(val_data)
 
-        timestamp = self.test_start
-        test_data = []
-        while timestamp < self.test_end:
-            test_data.append([timestamp])
-            timestamp = timestamp + timedelta(hours=1)
-        test_data = np.array(test_data)
+        # timestamp = self.test_start
+        # test_data = []
+        # while timestamp < self.test_end:
+        #     test_data.append([timestamp])
+        #     timestamp = timestamp + timedelta(hours=1)
+        # test_data = np.array(test_data)
 
         return [
             datasets.SplitGenerator(
@@ -142,40 +145,47 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
                     "filepath": train_data,
                     "split": "train",
                     "streaming": streaming,
+                    "future_frames": self.NUM_FUTURE_FRAMES,
+                    "past_frames": self.NUM_PREVIOUS_FRAMES,
                 },
             ),
-            datasets.SplitGenerator(
-                name=datasets.Split.TEST,
-                # These kwargs will be passed to _generate_examples
-                gen_kwargs={
-                    "filepath": test_data,
-                    "split": "test",
-                    "streaming": streaming,
-                },
-            ),
-            datasets.SplitGenerator(
-                name=datasets.Split.VALIDATION,
-                # These kwargs will be passed to _generate_examples
-                gen_kwargs={
-                    "filepath": val_data,
-                    "split": "valid",
-                    "streaming": streaming
-                },
-            ),
+            # datasets.SplitGenerator(
+            #     name=datasets.Split.TEST,
+            #     # These kwargs will be passed to _generate_examples
+            #     gen_kwargs={
+            #         "filepath": test_data,
+            #         "split": "test",
+            #         "streaming": streaming,
+            #         "future_frames": self.NUM_FUTURE_FRAMES,
+            #         "past_frames": self.NUM_PREVIOUS_FRAMES,
+            #     },
+            # ),
+            # datasets.SplitGenerator(
+            #     name=datasets.Split.VALIDATION,
+            #     # These kwargs will be passed to _generate_examples
+            #     gen_kwargs={
+            #         "filepath": val_data,
+            #         "split": "valid",
+            #         "streaming": streaming,
+            #         "future_frames": self.NUM_FUTURE_FRAMES,
+            #         "past_frames": self.NUM_PREVIOUS_FRAMES,
+            #     },
+            # ),
         ]
 
     def read_file(self, timestamp):
 
         file =  timestamp.strftime("../data/%Y/%Y-%m-%d/HRRR_PRS/%Y%m%d_%H00.zarr")
+        # print (f"reading {file}")
         ds = xr.open_zarr(file)
         #ds = ds[['t2m','u10','v10']].isel(valid_time=0).isel(x=slice(351,863),y=slice(263,775))
         ds = ds[['t2m']].isel(valid_time=0).isel(x=slice(351,863),y=slice(263,775))
-
+        # print ("have values")
         return ds['t2m'].values
 
 
     # method parameters are unpacked from `gen_kwargs` as given in `_split_generators`
-    def _generate_examples(self, filepath, split, streaming):
+    def _generate_examples(self, filepath, split, streaming, future_frames, past_frames):
 
         t2m_mean = 278.6412
         t2m_std = 21.236853
@@ -185,18 +195,34 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
         v10_std = 4.7881403
 
         idx = 0
-        for timestamp in filepath:
-            # print (timestamp)
+
+        for timestamps in filepath:
             try:
 
-                data = self.read_file(timestamp[0])
+                past_data = []
+                for i in range(past_frames-1,-1,-1):
+                    filetime = timestamps[0] - timedelta(hours=i*3)
+                    data = self.read_file(filetime)
+                    past_data.append(data)
+
+                past_data = np.array(past_data)
+                
+                predict_data = []
+                for i in range(1,future_frames+1):
+                    filetime = timestamps[0] + timedelta(hours=i*3)
+                    data = self.read_file(filetime)
+                    predict_data.append(data)
+
+                predict_data = np.array(predict_data)
 
                 value = {
-                    "data": data[np.newaxis,...], #np.stack(data.values, axis=2), 
-                    "predict": data[np.newaxis,...],
-                    "timestamp": timestamp
+                    "past": past_data, #np.stack(data.values, axis=2), 
+                    "predict": predict_data,
+                    "timestamp": timestamps
                 }
+
                 idx += 1 
+                
                 yield idx, value
             except Exception as e:
                 print (e)
