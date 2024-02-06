@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+#
+# @Author: Jebb Q. Stewart
+# @Date:   2023-12-16
+# @Email: jebb.q.stewart@noaa.gov 
+#
+# @Last modified by:   Jebb Q. Stewart
+# @Last Modified time: 2024-02-06 10:16:36
+
 import dateutil
 from datetime import datetime, timedelta
 import xarray as xr
@@ -40,10 +49,12 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
     VERSION = datasets.Version("0.0.1")
 
     BUILDER_CONFIGS = [
-        datasets.BuilderConfig(name="hrrr_v4_analysis", version=VERSION, description="HRRR v4 3km Analysis files"),
+        datasets.BuilderConfig(name="hrrr_v4_t2m_analysis", version=VERSION, description="HRRR v4 3km Analysis files"),
+        datasets.BuilderConfig(name="hrrr_v4_more_analysis", version=VERSION, description="HRRR v4 3km Analysis files"),
+
   ]
 
-    DEFAULT_CONFIG_NAME = "hrrr_v4_analysis"  # It's not mandatory to have a default configuration. Just use one if it make sense.
+    DEFAULT_CONFIG_NAME = "hrrr_v4_t2m_analysis"  # It's not mandatory to have a default configuration. Just use one if it make sense.
 
 
     def _info(self):
@@ -51,25 +62,29 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
         self.NUM_FEATURES = 1 
         self.NUM_PREVIOUS_FRAMES = 3 # T-6, T-3, T
         self.NUM_FUTURE_FRAMES = 2 # T+3, T+6
+        self.variables = ['t2m']
 
-        # features = {}
+        if self.config.name == "hrrr_v4_more_analysis":
+             self.variables = ['t2m', 'd2m', 'u10', 'v10', 'prmsl']
+             self.NUM_FEATURES = len(self.variables)
+
+        print (f"using {self.config.name}")
+        print ("  with variables:")
+        for v in self.variables:
+            print (f"    {v}")
 
         features = {
             "past": datasets.Array3D((self.NUM_PREVIOUS_FRAMES*self.NUM_FEATURES,512,512), dtype="float32"),
             "predict": datasets.Array3D((self.NUM_FUTURE_FRAMES*self.NUM_FEATURES,512,512), dtype="float32"),
-
             "timestamp": datasets.Sequence(datasets.Value("timestamp[ns]")),
             # "latitude": datasets.Sequence(datasets.Value("float32")),
             # "longitude": datasets.Sequence(datasets.Value("float32"))
         }
-        # if "forecast" in self.config.name:
-        # change feature set based on config name
-
 
         features = datasets.Features(features)
 
-        self.train_start =  dateutil.parser.parse("2023-01-04T00:00:00")
-        self.train_end = dateutil.parser.parse("2023-01-12T23:01:00")
+        self.train_start =  dateutil.parser.parse("2023-01-20T00:00:00")
+        self.train_end = dateutil.parser.parse("2023-01-20T17:01:00")
 
         self.test_start =  dateutil.parser.parse("2023-01-12T00:00:00")
         self.test_end = dateutil.parser.parse("2023-01-12T23:01:00")
@@ -120,8 +135,6 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
             train_data.append([timestamp])
             timestamp = timestamp + timedelta(hours=1)
         train_data = np.array(train_data)
-        print (train_data.shape)
-
 
         # timestamp = self.val_start
         # val_data = []
@@ -176,12 +189,17 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
     def read_file(self, timestamp):
 
         file =  timestamp.strftime("../data/%Y/%Y-%m-%d/HRRR_PRS/%Y%m%d_%H00.zarr")
-        # print (f"reading {file}")
         ds = xr.open_zarr(file)
-        #ds = ds[['t2m','u10','v10']].isel(valid_time=0).isel(x=slice(351,863),y=slice(263,775))
-        ds = ds[['t2m']].isel(valid_time=0).isel(x=slice(351,863),y=slice(263,775))
-        # print ("have values")
-        return ds['t2m'].values
+        ds = ds[self.variables].isel(valid_time=0).isel(x=slice(351,863),y=slice(263,775))
+
+        data = []
+
+        for v in self.variables:
+            data.append(ds[v].values)
+
+        data = np.array(data)
+
+        return data
 
 
     # method parameters are unpacked from `gen_kwargs` as given in `_split_generators`
@@ -203,9 +221,10 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
                 for i in range(past_frames-1,-1,-1):
                     filetime = timestamps[0] - timedelta(hours=i*3)
                     data = self.read_file(filetime)
+                    # print (data.shape)
                     past_data.append(data)
 
-                past_data = np.array(past_data)
+                past_data = np.vstack(past_data)
                 
                 predict_data = []
                 for i in range(1,future_frames+1):
@@ -213,16 +232,16 @@ class HrrrOnline(datasets.GeneratorBasedBuilder):
                     data = self.read_file(filetime)
                     predict_data.append(data)
 
-                predict_data = np.array(predict_data)
+                predict_data = np.vstack(predict_data)
 
                 value = {
-                    "past": past_data, #np.stack(data.values, axis=2), 
+                    "past": past_data, 
                     "predict": predict_data,
                     "timestamp": timestamps
                 }
 
                 idx += 1 
-                
+
                 yield idx, value
             except Exception as e:
                 print (e)

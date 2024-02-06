@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+#
+# @Author: Jebb Q. Stewart
+# @Date:   2023-12-16
+# @Email: jebb.q.stewart@noaa.gov 
+#
+# @Last modified by:   Jebb Q. Stewart
+# @Last Modified time: 2024-02-06 10:16:48
+
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -31,6 +40,7 @@ class PredictionPipeline(DiffusionPipeline):
         self,
         past_frames,
         predict_frames: int = 1,
+        num_features: int = 1,
         batch_size: int = 1,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         num_inference_steps: int = 1000,
@@ -80,7 +90,7 @@ class PredictionPipeline(DiffusionPipeline):
         # if isinstance(self.unet.config.sample_size, int):
         predict_shape = (
             1,
-            predict_frames,
+            predict_frames*num_features,
             self.unet.config.sample_size,
             self.unet.config.sample_size,
         )

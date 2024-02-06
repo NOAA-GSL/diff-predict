@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+#
+# @Author: Jebb Q. Stewart
+# @Date:   2023-12-16
+# @Email: jebb.q.stewart@noaa.gov 
+#
+# @Last modified by:   Jebb Q. Stewart
+# @Last Modified time: 2024-02-06 10:17:00
+
 from dataclasses import dataclass
 from XarrayDataset import XarrayDataset
 from PredictionPipeline import PredictionPipeline
@@ -40,6 +49,7 @@ class TrainingConfig:
     hub_private_repo = False
     overwrite_output_dir = True  # overwrite the old model when re-running the notebook
     seed = 42
+    num_features = 5
     past_frames = 3
     predict_frames = 2
 
@@ -48,8 +58,8 @@ config = TrainingConfig()
 
 model = UNet2DModel(
     sample_size=config.image_size,  # the target image resolution
-    in_channels=config.past_frames + config.predict_frames,  # the number of input channels, 3 for RGB images
-    out_channels=config.predict_frames,  # the number of output channels
+    in_channels=(config.past_frames + config.predict_frames) * config.num_features,  # the number of input channels, 3 for RGB images
+    out_channels=config.predict_frames * config.num_features,  # the number of output channels
     layers_per_block=2,  # how many ResNet layers to use per UNet block
     # block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
     # block_out_channels=(32,32,64,64,128,128),
@@ -72,8 +82,8 @@ model = UNet2DModel(
     ),
 )
 
-dataset = load_dataset("hrrr_disk", split="train", trust_remote_code=True)
-dataset.cleanup_cache_files()
+dataset = load_dataset("hrrr_disk", name="hrrr_v4_more_analysis", split="train", trust_remote_code=True)
+# dataset.cleanup_cache_files()
 
 t2m_mean = 278.6412
 t2m_std = 21.236853
@@ -129,26 +139,36 @@ def evaluate(config, epoch, pipeline):
         data = pipeline(past_image,
                  batch_size=2,
                  predict_frames=config.predict_frames,
+                 num_features=config.num_features,
                  generator=torch.Generator().manual_seed(config.seed),
                  output_type="np.array",
                  return_dict=False)[0]
 
         images=[]
         img_cnt = 1
+
+        # Make a row for predicted values
         images.append(past_img)
-        
         for i in range(0,config.predict_frames):
             img = Image.fromarray(((data[0,i,...] + 0.5) * 127.5).type(torch.uint8).numpy())
             images.append(img)
             img_cnt += 1
 
+        # Make a row for ground truth data
         images.append(past_img)
         for i in range(0,config.predict_frames):
             img = Image.fromarray(((pred_image[0,i,...] + 0.5) * 127.5).type(torch.uint8).numpy())
             images.append(img)
 
+        # Make a row for comparing differences
+        diff_img = Image.fromarray((((past_image[0,i,...]-past_image[0,i,...]) + 0.5) * 10 * 127.5).type(torch.uint8).numpy())
+        images.append(diff_img)
+        for i in range(0,config.predict_frames):
+            diff_img = Image.fromarray((((data[0,i,...]-pred_image[0,i,...]) + 0.5) * 10 * 127.5).type(torch.uint8).numpy())
+            images.append(diff_img)
+
         # Make a grid out of the images, rows cols must match image count
-        image_grid = make_image_grid(images, rows=2, cols=img_cnt)
+        image_grid = make_image_grid(images, rows=3, cols=img_cnt)
         image_grid.save(f"{test_dir}/{epoch:04d}.png")
 
     except Exception as e:

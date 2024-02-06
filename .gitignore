@@ -1,0 +1,33 @@
+# Local environment config
+.env
+
+# Use these directories for working files you need but shouldn't commit. Great
+# for database dumps and quick scripts.
+tmp/
+local/
+
+# Built files
+.ipynb_checkpoints/
+build/
+dist/
+fonts/
+node_modules/
+*.log
+*.pyc
+
+# Created by npm in the Docker container
+services/frontend/.npm-cache-docker/
+
+# Sample cross-section outputs from HRRR Smoke
+*htxssmoke*.png
+
+# OS Cruft
+.DS_Store
+
+# Text Editors / IDEs
+*.sublime-*
+.vscode
+.idea
+
+# Data Files
+notebooks/data
