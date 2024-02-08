@@ -24,7 +24,7 @@ Coming Soon!
 ## To Do
 
 - [ ] Add easy inference script
-- [ ] Investigate streaming dataset (IterableDataset) for better storage and memory management
+- [x] Investigate streaming dataset (IterableDataset) for better storage and memory management
 - [x] Add capability for multiple variables
 - [ ] Expand to vertical levels 
 

@@ -5,7 +5,7 @@
 # @Email: jebb.q.stewart@noaa.gov 
 #
 # @Last modified by:   Jebb Q. Stewart
-# @Last Modified time: 2024-02-06 14:26:57
+# @Last Modified time: 2024-02-08 11:28:12
 
 from dataclasses import dataclass
 from XarrayDataset import XarrayDataset
@@ -32,10 +32,11 @@ import torch
 
 @dataclass
 class TrainingConfig:
-    image_size = 128  # the generated image resolution
-    train_batch_size = 3
-    eval_batch_size = 3  # how many images to sample during evaluation
-    num_epochs = 100
+    image_size = 64  # the generated image resolution
+    train_batch_size = 5
+    eval_batch_size = 5  # how many images to sample during evaluation
+    num_workers = 8
+    num_epochs = 150
     gradient_accumulation_steps = 1
     learning_rate = 1e-4
     lr_warmup_steps = 500
@@ -52,6 +53,8 @@ class TrainingConfig:
     num_features = 5
     past_frames = 3
     predict_frames = 2
+    start_time = "2019-01-01T00:00:00"
+    end_time = "2023-06-30T23:59:00"
 
 
 config = TrainingConfig()
@@ -82,34 +85,27 @@ model = UNet2DModel(
     ),
 )
 
-dataset = load_dataset("hrrr_disk", name="hrrr_v4_more_analysis", split="train", trust_remote_code=True)
-# dataset.cleanup_cache_files()
+dataset = XarrayDataset(name="hrrr_v4_more_analysis", 
+                        data_start=config.start_time, 
+                        data_end=config.end_time,
+                        batch_size=config.train_batch_size,
+                        image_size=config.image_size).shuffle(seed=42)
+print (len(dataset))
 
-# t2m_mean = 278.6412
-# t2m_std = 21.236853
+def worker_init_fn(worker_id):
+    np.random.seed(np.random.get_state()[1][0] + worker_id)
 
-preprocess = transforms.Compose(
-    [
-        transforms.Resize((config.image_size, config.image_size),antialias=None),
-        # transforms.RandomHorizontalFlip(),
-        # transforms.Normalize([t2m_mean], [t2m_std]),
-    ]
-)
+train_dataloader = torch.utils.data.DataLoader(dataset,
+                                               num_workers=config.num_workers, 
+                                               batch_size=config.train_batch_size, 
+                                               worker_init_fn=worker_init_fn)
+                                               #, shuffle=True)
 
-def transform(examples):
-    # for data in examples["data"]:
-    #     # print(data)
-    #     # print (data)
-    #     print (np.array(data).shape)
-    dataset = [preprocess(torch.from_numpy(np.array(data,dtype=np.float32))) for data in examples["past"]]
-    predicted =  [preprocess(torch.from_numpy(np.array(data,dtype=np.float32))) for data in examples["predict"]]
-    return {"past": dataset, "predict": predicted }
+print (f"dataloader length {len(train_dataloader)}")
 
-dataset.set_transform(transform)
-train_dataloader = torch.utils.data.DataLoader(dataset, num_workers=8, batch_size=config.train_batch_size)#, shuffle=True)
-
-past_image = dataset[0]["past"].unsqueeze(0)
-pred_image = dataset[0]["predict"].unsqueeze(0)
+past_image,pred_image = next(iter(dataset))
+past_image = past_image[np.newaxis,...]
+pred_image = pred_image[np.newaxis,...]
 sample_set = torch.concat([past_image, pred_image], axis=1)
 
 
@@ -161,10 +157,10 @@ def evaluate(config, epoch, pipeline):
             images.append(img)
 
         # Make a row for comparing differences
-        diff_img = Image.fromarray((((past_image[0,i,...]-past_image[0,i,...]) + 0.5) * 10 * 127.5).type(torch.uint8).numpy())
+        diff_img = Image.fromarray((((past_image[0,i,...]-past_image[0,i,...]) + 0.5) * 127.5).type(torch.uint8).numpy())
         images.append(diff_img)
         for i in range(0,config.predict_frames):
-            diff_img = Image.fromarray((((data[0,i,...]-pred_image[0,i,...]) + 0.5) * 10 * 127.5).type(torch.uint8).numpy())
+            diff_img = Image.fromarray((((data[0,i,...]-pred_image[0,i,...]) + 0.5) * 127.5).type(torch.uint8).numpy())
             images.append(diff_img)
 
         # Make a grid out of the images, rows cols must match image count
@@ -207,8 +203,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         progress_bar.set_description(f"Epoch {epoch}")
 
         for step, batch in enumerate(train_dataloader):
-            past_images = batch["past"]
-            pred_images = batch["predict"]
+            past_images,pred_images = batch
 
             # Sample noise to add to the images
             noise = torch.randn(pred_images.shape, device=pred_images.device)
@@ -270,12 +265,5 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
 
            
 
-
-#from accelerate import notebook_launcher
-#
-#args = (config, model, noise_scheduler, optimizer, train_dataloader, lr_scheduler)
-#train_loop(args)
 train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_scheduler)
-#
-#notebook_launcher(train_loop, args, num_processes=1)
 
