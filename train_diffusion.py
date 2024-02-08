@@ -5,7 +5,7 @@
 # @Email: jebb.q.stewart@noaa.gov 
 #
 # @Last modified by:   Jebb Q. Stewart
-# @Last Modified time: 2024-02-08 11:28:12
+# @Last Modified time: 2024-02-08 11:32:54
 
 from dataclasses import dataclass
 from XarrayDataset import XarrayDataset
@@ -60,6 +60,7 @@ class TrainingConfig:
 config = TrainingConfig()
 
 model = UNet2DModel(
+    #https://huggingface.co/docs/diffusers/en/api/models/unet2d
     sample_size=config.image_size,  # the target image resolution
     in_channels=(config.past_frames + config.predict_frames) * config.num_features,  # the number of input channels, 3 for RGB images
     out_channels=config.predict_frames * config.num_features,  # the number of output channels
@@ -67,6 +68,7 @@ model = UNet2DModel(
     # block_out_channels=(128, 128, 256, 256, 512, 512),  # the number of output channels for each UNet block
     # block_out_channels=(32,32,64,64,128,128),
     block_out_channels=(64,64,128,128,256,256),
+    # down_block_types defaults ("DownBlock2D", "AttnDownBlock2D", "AttnDownBlock2D", "AttnDownBlock2D")
     down_block_types=(
         "DownBlock2D",  # a regular ResNet downsampling block
         "DownBlock2D",
@@ -75,6 +77,7 @@ model = UNet2DModel(
         "AttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
         "DownBlock2D",
     ),
+    # up_block_types defaults to ("AttnUpBlock2D", "AttnUpBlock2D", "AttnUpBlock2D", "UpBlock2D")
     up_block_types=(
         "UpBlock2D",  # a regular ResNet upsampling block
         "AttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
