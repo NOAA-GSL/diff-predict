@@ -5,7 +5,7 @@
 # @Email: jebb.q.stewart@noaa.gov 
 #
 # @Last modified by:   Jebb Q. Stewart
-# @Last Modified time: 2024-02-08 11:19:35
+# @Last Modified time: 2024-02-08 11:46:26
 
 import datasets
 import numpy as np
@@ -158,7 +158,7 @@ class XarrayDataset(IterableDataset):
         if worker_info:
             worker_total_num = worker_info.num_workers
             worker_id = worker_info.id
-            partition = itertools.islice(self.dataset, worker_id, None, self.batch_size)
+            partition = itertools.islice(self.dataset, worker_id, None, worker_total_num)
         else:
             partition = self.dataset
 
