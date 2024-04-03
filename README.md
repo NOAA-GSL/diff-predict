@@ -2,13 +2,7 @@
 
 This is an **experimental** project that implements AI Diffusion Techniques for predicting future frames.  Based off work outlined at: https://huggingface.co/docs/diffusers/main/en/tutorials/basic_training
 
-This assumes you have preprocessed zarr data somewhere in advance. See hrrr_disk/hrrr_disk.py for how to load data
-
-When loading a dataset, it will create a cache under your user home directory i.e. ~USER/.cache.  To change the caching location use:
-```
-export HF_DATASETS_CACHE="/path/to/another/directory"
-```
-
+This assumes you have preprocessed zarr data somewhere in advance. 
 
 ## Training 
 ```
@@ -19,11 +13,15 @@ This will create a hrrr-2tm directory with logs, sample images as various epochs
 
 ## Inference
 
-Coming Soon!
+Modify TrainingConfig information at top to match your trained model then:
+
+```
+python3 -u inference.py
+```
 
 ## To Do
 
-- [ ] Add easy inference script
+- [x] Add easy inference script
 - [x] Investigate streaming dataset (IterableDataset) for better storage and memory management
 - [x] Add capability for multiple variables
 - [ ] Expand to vertical levels 
