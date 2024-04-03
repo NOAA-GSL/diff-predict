@@ -5,7 +5,7 @@
 # @Email: jebb.q.stewart@noaa.gov 
 #
 # @Last modified by:   Jebb Q. Stewart
-# @Last Modified time: 2024-02-06 10:16:48
+# @Last Modified time: 2024-04-03 18:20:04
 
 from typing import List, Optional, Tuple, Union
 
@@ -34,6 +34,17 @@ class PredictionPipeline(DiffusionPipeline):
     def __init__(self, unet, scheduler):
         super().__init__()
         self.register_modules(unet=unet, scheduler=scheduler)
+
+    r"""
+    Load existing pipeline weights
+
+    Args:
+        path ('str'):
+            The path to the directory containing weights.
+    """
+    def from_single_file(self, path):
+        super().from_single_file(path)
+
 
     @torch.no_grad()
     def __call__(
@@ -107,14 +118,19 @@ class PredictionPipeline(DiffusionPipeline):
         # set step values
         self.scheduler.set_timesteps(num_inference_steps)
 
+
         new_frames = torch.randn(predict_shape, generator=generator, dtype=past_frames.dtype, device=self.device)
+        # ensure data is all in same device
+        past_frames = past_frames.to(self.device)
 
         for t in self.progress_bar(self.scheduler.timesteps):
             # 1. predict noise model_output
             noise = self.unet(torch.cat([past_frames, new_frames], dim=1), t).sample
 
             # 2. compute previous image: x_t -> x_t-1
+            noise = self.scheduler.scale_model_input(noise, t)
             new_frames = self.scheduler.step(noise, t, new_frames, generator=generator).prev_sample
+
 
         # convert from Tensor to numpy
         new_frames.float().cpu().numpy()

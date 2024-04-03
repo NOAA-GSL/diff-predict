@@ -5,7 +5,7 @@
 # @Email: jebb.q.stewart@noaa.gov 
 #
 # @Last modified by:   Jebb Q. Stewart
-# @Last Modified time: 2024-02-08 11:46:26
+# @Last Modified time: 2024-04-03 18:36:33
 
 import datasets
 import numpy as np
@@ -24,11 +24,18 @@ from torchvision import transforms as T
 
 
 class XarrayDataset(IterableDataset):
-    def __init__(self, data_start, data_end, name, batch_size, image_size):
+    def __init__(self, data_start, data_end, name, 
+             batch_size, 
+             image_size = 64,
+             shuffle=True,
+             num_features = 1,
+             previous_frames = 2,
+             future_frames = 2):
         super().__init__()
 
         self.name = name
         self.batch_size = batch_size
+        self.shuffle_on_iter = shuffle
 
         self.image_size=image_size
         tfms = [T.Resize((self.image_size, self.image_size),antialias=None)] if self.image_size is not None else []
@@ -39,8 +46,8 @@ class XarrayDataset(IterableDataset):
         LONGITUDE = 512
 
         self.NUM_FEATURES = 1 
-        self.NUM_PREVIOUS_FRAMES = 3 # T-6, T-3, T
-        self.NUM_FUTURE_FRAMES = 2 # T+3, T+6
+        self.NUM_PREVIOUS_FRAMES = previous_frames # T-6, T-3, T
+        self.NUM_FUTURE_FRAMES = future_frames # T+3, T+6
         self.variables = ['t2m']
 
         # TODO: extract out to file or something else
@@ -61,11 +68,6 @@ class XarrayDataset(IterableDataset):
         if self.name == "hrrr_v4_more_analysis":
              self.variables = ['t2m', 'u10', 'v10', 'prmsl', 'pwat']
              self.NUM_FEATURES = len(self.variables)
-
-        print (f"using {self.name}")
-        print ("  with variables:")
-        for v in self.variables:
-            print (f"    {v}")
 
         features = {
             "past": datasets.Array3D((self.NUM_PREVIOUS_FRAMES*self.NUM_FEATURES,512,512), dtype="float32"),
@@ -141,10 +143,14 @@ class XarrayDataset(IterableDataset):
 
         return value
 
-    def shuffle(self, seed):
+    def shuffle(self, seed=None):
         """Shuffles the dataset, useful for getting 
         interesting samples on the validation dataset"""
-        idxs = torch.randperm(len(self.dataset),generator=torch.Generator().manual_seed(seed))
+        if seed:
+            idxs = torch.randperm(len(self.dataset),generator=torch.Generator().manual_seed(seed))
+        else:
+            idxs = torch.randperm(len(self.dataset),generator=torch.Generator())
+
         self.dataset = self.dataset[idxs]
         return self
 
@@ -153,6 +159,9 @@ class XarrayDataset(IterableDataset):
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
+        # shuffle
+        if self.shuffle_on_iter:
+            self.shuffle()
 
         # Split our dataset based on the number of workers
         if worker_info:
@@ -168,7 +177,6 @@ class XarrayDataset(IterableDataset):
                 data = self.read(timestamp)
                 yield data["past"],data["predict"]
             except Exception as e:
-                print (e)
                 continue
 
        
